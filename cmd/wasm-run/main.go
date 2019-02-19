@@ -92,7 +92,7 @@ func run(w io.Writer, fname string, verify bool) {
 	defer f.Close()
 
 	host := &Runtime{}
-	raw, err := ioutil.ReadFile("a.out")
+	raw, err := ioutil.ReadFile(fname)
 	m, err := wasm.ReadModule(bytes.NewReader(raw), func(name string) (*wasm.Module, error) {
 		switch name {
 		case "env":
