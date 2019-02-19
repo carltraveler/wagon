@@ -5,11 +5,14 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 
 	"github.com/go-interpreter/wagon/exec"
 	"github.com/go-interpreter/wagon/validate"
@@ -35,6 +38,52 @@ func main() {
 	run(os.Stdout, flag.Arg(0), *verify)
 }
 
+type Runtime struct {
+	Input      []byte
+	Output     []byte
+	CallOutPut []byte
+}
+
+func (self *Runtime) prints_l(proc *exec.Process, ptr uint32, len uint32) {
+	bs := make([]byte, len)
+	_, err := proc.ReadAt(bs, int64(ptr))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s", bs)
+}
+
+func NewHostModule(host *Runtime) *wasm.Module {
+	m := wasm.NewModule()
+	m.Types = &wasm.SectionTypes{
+		Entries: []wasm.FunctionSig{
+			{
+				Form:       0,
+				ParamTypes: []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32},
+			},
+		},
+	}
+
+	m.FunctionIndexSpace = []wasm.Function{
+		{
+			Sig:  &m.Types.Entries[0],
+			Host: reflect.ValueOf(host.prints_l),
+			Body: &wasm.FunctionBody{},
+		},
+	}
+
+	m.Export = &wasm.SectionExports{
+		Entries: map[string]wasm.ExportEntry{
+			"prints_l": {
+				FieldStr: "prints_l",
+				Kind:     wasm.ExternalFunction,
+				Index:    0,
+			},
+		},
+	}
+	return m
+}
+
 func run(w io.Writer, fname string, verify bool) {
 	f, err := os.Open(fname)
 	if err != nil {
@@ -42,7 +91,17 @@ func run(w io.Writer, fname string, verify bool) {
 	}
 	defer f.Close()
 
-	m, err := wasm.ReadModule(f, importer)
+	host := &Runtime{}
+	raw, err := ioutil.ReadFile("a.out")
+	m, err := wasm.ReadModule(bytes.NewReader(raw), func(name string) (*wasm.Module, error) {
+		switch name {
+		case "env":
+			return NewHostModule(host), nil
+		}
+		return nil, fmt.Errorf("module %q unknown", name)
+	})
+
+	//m, err := wasm.ReadModule(f, importer)
 	if err != nil {
 		log.Fatalf("could not read module: %v", err)
 	}
@@ -74,37 +133,6 @@ func run(w io.Writer, fname string, verify bool) {
 	res, err := vm.ExecCode(index, params...)
 
 	fmt.Printf("exec res : %d\n", res)
-	/*
-		for name, e := range m.Export.Entries {
-			i := int64(e.Index)
-			fidx := m.Function.Types[int(i)]
-			ftype := m.Types.Entries[int(fidx)]
-			switch len(ftype.ReturnTypes) {
-			case 1:
-				fmt.Fprintf(w, "%s() %s => ", name, ftype.ReturnTypes[0])
-			case 0:
-				fmt.Fprintf(w, "%s() => ", name)
-			default:
-				log.Printf("running exported functions with more than one return value is not supported")
-				continue
-			}
-			if len(ftype.ParamTypes) > 0 {
-				log.Printf("running exported functions with input parameters is not supported")
-				continue
-			}
-			o, err := vm.ExecCode(i)
-			if err != nil {
-				fmt.Fprintf(w, "\n")
-				log.Printf("err=%v", err)
-				continue
-			}
-			if len(ftype.ReturnTypes) == 0 {
-				fmt.Fprintf(w, "\n")
-				continue
-			}
-			fmt.Fprintf(w, "%[1]v (%[1]T)\n", o)
-		}
-	*/
 }
 
 func importer(name string) (*wasm.Module, error) {
