@@ -45,8 +45,7 @@ type Runtime struct {
 	CallOutPut []byte
 }
 
-func (self *Runtime) prints_l(proc *exec.Process, ptr uint32, len uint32) {
-	//fmt.Printf("prints_l called\n")
+func (self *Runtime) debug(proc *exec.Process, ptr uint32, len uint32) {
 	bs := make([]byte, len)
 	_, err := proc.ReadAt(bs, int64(ptr))
 	if err != nil {
@@ -57,6 +56,32 @@ func (self *Runtime) prints_l(proc *exec.Process, ptr uint32, len uint32) {
 
 func (self *Runtime) abort(proc *exec.Process) {
 	fmt.Printf("abort called\n")
+	panic(nil)
+}
+
+func (self *Runtime) save_input_arg(proc *exec.Process, ptr uint32, len uint32) {
+	bs := make([]byte, len)
+	_, err := proc.ReadAt(bs, int64(ptr))
+	if err != nil {
+		panic(err)
+	}
+
+	self.Input = make([]byte, len)
+	copy(self.Input, bs)
+	fmt.Printf("%x\n", self.Input)
+
+	//panic(nil)
+}
+
+func (self *Runtime) get_input(proc *exec.Process, dst uint32) {
+	_, err := proc.WriteAt(self.Input, int64(dst))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (self *Runtime) input_length(proc *exec.Process) uint32 {
+	return uint32(len(self.Input))
 }
 
 func (self *Runtime) ont_assert(proc *exec.Process, istrue uint32, msg uint32, len uint32) {
@@ -86,13 +111,21 @@ func NewHostModule(host *Runtime) *wasm.Module {
 				Form:       0,
 				ParamTypes: []wasm.ValueType{wasm.ValueTypeI32, wasm.ValueTypeI32, wasm.ValueTypeI32},
 			},
+			{
+				Form:       0,
+				ParamTypes: []wasm.ValueType{wasm.ValueTypeI32},
+			},
+			{
+				Form:        0,
+				ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
+			},
 		},
 	}
 
 	m.FunctionIndexSpace = []wasm.Function{
 		{
 			Sig:  &m.Types.Entries[0],
-			Host: reflect.ValueOf(host.prints_l),
+			Host: reflect.ValueOf(host.debug),
 			Body: &wasm.FunctionBody{},
 		},
 		{
@@ -105,12 +138,27 @@ func NewHostModule(host *Runtime) *wasm.Module {
 			Host: reflect.ValueOf(host.ont_assert),
 			Body: &wasm.FunctionBody{},
 		},
+		{
+			Sig:  &m.Types.Entries[0],
+			Host: reflect.ValueOf(host.save_input_arg),
+			Body: &wasm.FunctionBody{},
+		},
+		{
+			Sig:  &m.Types.Entries[3],
+			Host: reflect.ValueOf(host.get_input),
+			Body: &wasm.FunctionBody{},
+		},
+		{
+			Sig:  &m.Types.Entries[4],
+			Host: reflect.ValueOf(host.input_length),
+			Body: &wasm.FunctionBody{},
+		},
 	}
 
 	m.Export = &wasm.SectionExports{
 		Entries: map[string]wasm.ExportEntry{
-			"prints_l": {
-				FieldStr: "prints_l",
+			"debug": {
+				FieldStr: "debug",
 				Kind:     wasm.ExternalFunction,
 				Index:    0,
 			},
@@ -123,6 +171,21 @@ func NewHostModule(host *Runtime) *wasm.Module {
 				FieldStr: "ont_assert",
 				Kind:     wasm.ExternalFunction,
 				Index:    2,
+			},
+			"save_input_arg": {
+				FieldStr: "save_input_arg",
+				Kind:     wasm.ExternalFunction,
+				Index:    3,
+			},
+			"get_input": {
+				FieldStr: "get_input",
+				Kind:     wasm.ExternalFunction,
+				Index:    4,
+			},
+			"input_length": {
+				FieldStr: "input_length",
+				Kind:     wasm.ExternalFunction,
+				Index:    5,
 			},
 		},
 	}
@@ -167,7 +230,7 @@ func run(w io.Writer, fname string, verify bool) {
 		log.Fatalf("could not create VM: %v", err)
 	}
 
-	vm.AvaliableGas = &exec.Gas{GasPrice: 500, GasLimit: 1000000}
+	vm.AvaliableGas = &exec.Gas{GasPrice: 500, GasLimit: 10000000000}
 
 	entryname := "invoke"
 	entry, ok := m.Export.Entries[entryname]
