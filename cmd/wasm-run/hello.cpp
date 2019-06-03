@@ -1,6 +1,8 @@
 #define WASM_LOCAL_DEBUG
 #define WASM_DEBUG_INTERFACE
 #include<ontiolib/ontio.hpp>
+#include<base58.hpp>
+
 
 using namespace ontio;
 extern "C" {
@@ -39,14 +41,11 @@ public:
 
 	void hi(void) {
 		//address OWNER = {0xe9,0x8f,0x49,0x98,0xd8,0x37,0xfc,0xdd,0x44,0xa5,0x05,0x61,0xf7,0xf3,0x21,0x40,0xc7,0xc6,0xc2,0x60};
-		//std::string b58("Ad4pjz2bqep4RhQrUAzMuZJkBC3qJ1tZuT");
+		std::string b58("Ad4pjz2bqep4RhQrUAzMuZJkBC3qJ1tZuT");
 		//std::string b58("19DXstMaV43WpYg4ceREiiTv2UntmoiA9j");
 		//char *b58 = "TA5gYXCSiUq9ejGCa54M3yoj9kfMv3ir4j";
-		//address tmp = Base58toaddress(b58);
-		//print_byte((uint8_t *)tmp.data(), tmp.size());
-		int a = 2;
-		int b = 2;
-		ontio::check(a == b, "test message");
+		address tmp = Base58toaddress(b58);
+		print_byte((uint8_t *)tmp.data(), tmp.size());
 #if 1
 		/*
 		std::vector<char> s;

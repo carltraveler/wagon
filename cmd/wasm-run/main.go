@@ -11,8 +11,11 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"reflect"
+	"runtime/pprof"
+	"time"
 
 	"github.com/go-interpreter/wagon/exec"
 	"github.com/go-interpreter/wagon/validate"
@@ -34,6 +37,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	//var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file` ")
+	//var memprofile = flag.String("memprofile", "", "write memory profile `file` to ")
+
+	cpuprofile := "./cpu.prof"
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+
+		}
+		defer pprof.StopCPUProfile()
+
+	}
+
 	wasm.SetDebugMode(*verbose)
 
 	run(os.Stdout, flag.Arg(0), *verify)
@@ -43,6 +64,39 @@ type Runtime struct {
 	Input      []byte
 	Output     []byte
 	CallOutPut []byte
+}
+
+func (self *Runtime) block_height(proc *exec.Process) uint32 {
+	//fmt.Printf("outputlength: %d\n", uint32(len(self.Output)))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return uint32(r.Uint32())
+}
+
+func (self *Runtime) call_output_length(proc *exec.Process) uint32 {
+	//fmt.Printf("outputlength: %d\n", uint32(len(self.Output)))
+	return uint32(len(self.Output))
+}
+
+func (self *Runtime) ret(proc *exec.Process, ptr uint32, len uint32) {
+	//self := proc.HostData().(*Runtime)
+	bs := make([]byte, len)
+	_, err := proc.ReadAt(bs, int64(ptr))
+	if err != nil {
+		panic(err)
+	}
+
+	self.Output = bs
+	//fmt.Printf("ret bytes %x\n", self.Output)
+	//proc.Terminate()
+}
+
+func (self *Runtime) get_call_output(proc *exec.Process, dst uint32) {
+	//self := proc.HostData().(*Runtime)
+	_, err := proc.WriteAt(self.Output, int64(dst))
+	//fmt.Printf("output bytes %x\n", self.Output)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (self *Runtime) debug(proc *exec.Process, ptr uint32, len uint32) {
@@ -59,6 +113,12 @@ func (self *Runtime) abort(proc *exec.Process) {
 	panic(nil)
 }
 
+func (self *Runtime) timestamp(proc *exec.Process) uint64 {
+	//res := rand.Intn()
+	res := 2
+	return uint64(res)
+}
+
 func (self *Runtime) save_input_arg(proc *exec.Process, ptr uint32, len uint32) {
 	bs := make([]byte, len)
 	_, err := proc.ReadAt(bs, int64(ptr))
@@ -68,7 +128,6 @@ func (self *Runtime) save_input_arg(proc *exec.Process, ptr uint32, len uint32) 
 
 	self.Input = make([]byte, len)
 	copy(self.Input, bs)
-	fmt.Printf("%x\n", self.Input)
 
 	//panic(nil)
 }
@@ -85,7 +144,7 @@ func (self *Runtime) input_length(proc *exec.Process) uint32 {
 }
 
 func (self *Runtime) ont_assert(proc *exec.Process, istrue uint32, msg uint32, len uint32) {
-	fmt.Printf("ont_assert called\n")
+	//fmt.Printf("ont_assert called\n")
 	if istrue != 0 {
 		bs := make([]byte, len)
 		_, err := proc.ReadAt(bs, int64(msg))
@@ -118,6 +177,10 @@ func NewHostModule(host *Runtime) *wasm.Module {
 			{
 				Form:        0,
 				ReturnTypes: []wasm.ValueType{wasm.ValueTypeI32},
+			},
+			{
+				Form:        0,
+				ReturnTypes: []wasm.ValueType{wasm.ValueTypeI64},
 			},
 		},
 	}
@@ -153,6 +216,31 @@ func NewHostModule(host *Runtime) *wasm.Module {
 			Host: reflect.ValueOf(host.input_length),
 			Body: &wasm.FunctionBody{},
 		},
+		{
+			Sig:  &m.Types.Entries[5],
+			Host: reflect.ValueOf(host.timestamp),
+			Body: &wasm.FunctionBody{},
+		},
+		{
+			Sig:  &m.Types.Entries[0],
+			Host: reflect.ValueOf(host.ret),
+			Body: &wasm.FunctionBody{},
+		},
+		{
+			Sig:  &m.Types.Entries[3],
+			Host: reflect.ValueOf(host.get_call_output),
+			Body: &wasm.FunctionBody{},
+		},
+		{
+			Sig:  &m.Types.Entries[4],
+			Host: reflect.ValueOf(host.call_output_length),
+			Body: &wasm.FunctionBody{},
+		},
+		{
+			Sig:  &m.Types.Entries[4],
+			Host: reflect.ValueOf(host.block_height),
+			Body: &wasm.FunctionBody{},
+		},
 	}
 
 	m.Export = &wasm.SectionExports{
@@ -186,6 +274,31 @@ func NewHostModule(host *Runtime) *wasm.Module {
 				FieldStr: "input_length",
 				Kind:     wasm.ExternalFunction,
 				Index:    5,
+			},
+			"timestamp": {
+				FieldStr: "timestamp",
+				Kind:     wasm.ExternalFunction,
+				Index:    6,
+			},
+			"ret": {
+				FieldStr: "ret",
+				Kind:     wasm.ExternalFunction,
+				Index:    7,
+			},
+			"get_call_output": {
+				FieldStr: "get_call_output",
+				Kind:     wasm.ExternalFunction,
+				Index:    8,
+			},
+			"call_output_length": {
+				FieldStr: "call_output_length",
+				Kind:     wasm.ExternalFunction,
+				Index:    9,
+			},
+			"block_height": {
+				FieldStr: "block_height",
+				Kind:     wasm.ExternalFunction,
+				Index:    10,
 			},
 		},
 	}
@@ -230,7 +343,7 @@ func run(w io.Writer, fname string, verify bool) {
 		log.Fatalf("could not create VM: %v", err)
 	}
 
-	vm.AvaliableGas = &exec.Gas{GasPrice: 500, GasLimit: 10000000000}
+	vm.AvaliableGas = &exec.Gas{GasPrice: 500, GasLimit: 1000000000000000000}
 
 	entryname := "invoke"
 	entry, ok := m.Export.Entries[entryname]

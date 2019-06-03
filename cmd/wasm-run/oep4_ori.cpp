@@ -1,5 +1,5 @@
-#define WASM_DEBUG_INTERFACE
-//#define WASM_LOCAL_DEBUG_OEP4
+//#define WASM_DEBUG_INTERFACE
+#define WASM_LOCAL_DEBUG_OEP4
 #include<ontiolib/ontio.hpp>
 using namespace ontio;
 
@@ -11,7 +11,7 @@ class oep4 : public contract {
 
 	public:
 	using contract::contract;
-	void init(void) {
+	bool init(void) {
 #ifdef WASM_LOCAL_DEBUG_OEP4
 		printf("%s\n",__FUNCTION__);
 #endif
@@ -21,89 +21,106 @@ class oep4 : public contract {
 		for(auto i: OWNER) { printf("%02x", i); }; printf("\n");
 #endif
 		if (check_witness(OWNER)) {
-			if(storage_read(SUPPLY_KEY, total_inner)) {
+			if(storage_get(SUPPLY_KEY, total_inner)) {
 #ifdef WASM_LOCAL_DEBUG_OEP4
 				printf("already init. total = %lld\n", total_inner.amount);
 #endif
-				ret(success);
+				return success;
 			} else {
 #ifdef WASM_LOCAL_DEBUG_OEP4
 				printf("start init. total %lld", total.amount);
 #endif
 				success = true;
 				key key_owner = make_key(balanceprfix, OWNER);
-				storage_write(SUPPLY_KEY, total);
-				storage_write(key_owner, total);
-				ret(success);
+#ifdef WASM_LOCAL_DEBUG_OEP4
+				printf("key_owner: ");
+				for(auto i: key_owner) { printf("%02x",i); }
+				printf("\n");
+#endif
+				storage_put(SUPPLY_KEY, total);
+				storage_put(key_owner, total);
+				notify("init success hello world.");
+				return success;
 			}
 		} else {
 #ifdef WASM_LOCAL_DEBUG_OEP4
 			printf("auth failed\n");
 #endif
 			success = false;
-			ret(success);
+			return success;
 		}
 	}
 
-	void transfer(address from, address to, asset amount) {
-#ifdef WASM_LOCAL_DEBUG_OEP4
-		printf("%s\n",__FUNCTION__);
-#endif
-		bool success = true;
-		bool faild = false;
-		if (not check_witness(from)) {
-#ifdef WASM_LOCAL_DEBUG_OEP4
-			printf("transfer auth failed\n");
-#endif
-			ret(faild);
-		}
-
-		if (amount < 0)
-			ret(faild);
-
-		key fromkey = make_key(balanceprfix, from);
-		asset frombalance = 0; 
-		if (not storage_read(fromkey, frombalance))
-			ret(faild);
-
-		if (amount > frombalance)
-			ret(faild);
-		else if (amount == frombalance)
-			storage_delete(fromkey);
-		else {
-			frombalance -= amount;
-			storage_write(fromkey, frombalance);
-		}
-
-		key tokey = make_key(balanceprfix, to);
-		asset tobalance = 0;
-		storage_read(tokey, tobalance);
-
-		tobalance += amount;
-#ifdef WASM_LOCAL_DEBUG_OEP4
-		printf("transfer amount : %lld\n", amount.amount);
-#endif
-		storage_write(tokey, tobalance);
-		ret(success);
-	}
-
-	void balanceOf(address addr) {
+	bool transfer(address from, address to, asset amount) {
 #ifdef WASM_LOCAL_DEBUG_OEP4
 		printf("%s\n",__FUNCTION__);
 #endif
 		bool success = true;
 		bool failed = false;
+		if (not check_witness(from)) {
+#ifdef WASM_LOCAL_DEBUG_OEP4
+			printf("transfer auth failed\n");
+#endif
+			return failed;
+		}
+
+		if (amount < 0)
+			return failed;
+
+		key fromkey = make_key(balanceprfix, from);
+		asset frombalance = 0; 
+		if (not storage_get(fromkey, frombalance))
+			return failed;
+
+		if (amount > frombalance)
+			return failed;
+		else if (amount == frombalance)
+			storage_delete(fromkey);
+		else {
+			//frombalance -= amount;
+			storage_put(fromkey, frombalance - amount);
+		}
+
+		key tokey = make_key(balanceprfix, to);
+		asset tobalance = 0;
+		storage_get(tokey, tobalance);
+
+		tobalance += amount;
+		ontio_assert(tobalance > amount, "hahahh");
+#ifdef WASM_LOCAL_DEBUG_OEP4
+		printf("transfer amount : %lld\n", amount.amount);
+#endif
+		storage_put(tokey, tobalance);
+		return failed;
+	}
+
+	asset balanceOf(address addr) {
+#ifdef WASM_LOCAL_DEBUG_OEP4
+		printf("%s\n",__FUNCTION__);
+		printf("get the balance of address: ");
+		for(auto i: addr) { printf("%02x", i); }
+		printf("\n");
+#endif
+		bool success = true;
+		bool failed = false;
 		asset mybalance = 0;
-		key addr_key = make_key(balanceprfix, addr);
-		if (not storage_read(addr_key, mybalance)) {
+		key addr_key = make_key(balanceprfix, '_', addr);
+#ifdef WASM_LOCAL_DEBUG_OEP4
+		printf("addr_key: ");
+		for(auto i: addr_key) { printf("%02x",i); }
+		printf("\n");
+#endif
+		if (not storage_get(addr_key, mybalance)) {
 #ifdef WASM_LOCAL_DEBUG_OEP4
 			printf("read failed\n");
 #endif
+			return -1;
 		}
 #ifdef WASM_LOCAL_DEBUG_OEP4
 		printf("read success\n");
 		printf("balance %lld\n", mybalance.amount);
 #endif
+		return mybalance;
 	}
 };
 
