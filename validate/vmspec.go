@@ -23,6 +23,10 @@ const (
 	frameTypeLoop     frameType = 0x5b
 )
 
+const (
+	ValueTypeUnk wasm.ValueType = 0x7b
+)
+
 type mockSpecVM struct {
 	opdStack   []wasm.ValueType
 	ctrlStack  []ctrlFrame
@@ -135,17 +139,17 @@ func (vm *mockSpecVM) pushOpd(Type wasm.ValueType) error {
 func (vm *mockSpecVM) popOpd() (wasm.ValueType, error) {
 	topFrame, err := vm.topCtrl()
 	if err != nil {
-		return wasm.ValueTypeUnk, err
+		return ValueTypeUnk, err
 	}
 
 	if topFrame.height == vm.opdSize() && topFrame.unreachable {
-		return wasm.ValueTypeUnk, nil
+		return ValueTypeUnk, nil
 	} else if topFrame.height == vm.opdSize() {
-		return wasm.ValueTypeUnk, errors.New("operand stack underflow")
+		return ValueTypeUnk, errors.New("operand stack underflow")
 	}
 
 	if len(vm.opdStack) == 0 {
-		return wasm.ValueTypeUnk, errors.New("code0 logic error")
+		return ValueTypeUnk, errors.New("code0 logic error")
 	}
 
 	Type := vm.opdStack[len(vm.opdStack)-1]
@@ -182,19 +186,19 @@ func (vm *mockSpecVM) popOpdExpect(expect wasm.ValueType) (wasm.ValueType, error
 
 	actual, err := vm.popOpd()
 	if err != nil {
-		return wasm.ValueTypeUnk, err
+		return ValueTypeUnk, err
 	}
 
-	if actual == wasm.ValueTypeUnk {
+	if actual == ValueTypeUnk {
 		return expect, nil
 	}
 
-	if expect == wasm.ValueTypeUnk {
+	if expect == ValueTypeUnk {
 		return actual, nil
 	}
 
 	if actual != expect {
-		return wasm.ValueTypeUnk, errors.New("not expect type")
+		return ValueTypeUnk, errors.New("not expect type")
 	}
 
 	return actual, nil
@@ -216,16 +220,16 @@ func (vm *mockSpecVM) pushCtrl(labelTypes wasm.ValueType, endType wasm.ValueType
 func (vm *mockSpecVM) popCtrl() (wasm.ValueType, error) {
 	topFrame, err := vm.topCtrl()
 	if err != nil {
-		return wasm.ValueTypeUnk, err
+		return ValueTypeUnk, err
 	}
 
 	_, err = vm.popOpdExpect(topFrame.endType)
 	if err != nil {
-		return wasm.ValueTypeUnk, err
+		return ValueTypeUnk, err
 	}
 
 	if vm.opdSize() != topFrame.height {
-		return wasm.ValueTypeUnk, errors.New("stack overflow")
+		return ValueTypeUnk, errors.New("stack overflow")
 	}
 
 	vm.ctrlStack = vm.ctrlStack[:len(vm.ctrlStack)-1]
