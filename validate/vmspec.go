@@ -149,9 +149,6 @@ func (vm *mockSpecVM) popOpd() (wasm.ValueType, error) {
 	}
 
 	Type := vm.opdStack[len(vm.opdStack)-1]
-	if Type == wasm.ValueTypeUnk {
-		return wasm.ValueTypeUnk, errors.New("code1 logic error")
-	}
 
 	vm.opdStack = vm.opdStack[:len(vm.opdStack)-1]
 	return Type, nil
@@ -189,7 +186,7 @@ func (vm *mockSpecVM) popOpdExpect(expect wasm.ValueType) (wasm.ValueType, error
 	}
 
 	if actual == wasm.ValueTypeUnk {
-		return wasm.ValueTypeUnk, nil
+		return expect, nil
 	}
 
 	if expect == wasm.ValueTypeUnk {
