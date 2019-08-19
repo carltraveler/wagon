@@ -379,8 +379,10 @@ func VerifyModule(module *wasm.Module) error {
 
 	logger.Printf("There are %d functions", len(module.Function.Types))
 	for i, fn := range module.FunctionIndexSpace {
-		if vm, err := verifyBody(fn.Sig, fn.Body, module); err != nil {
-			return Error{vm.pc(), i, err}
+		if !fn.IsHost() {
+			if vm, err := verifyBodyWithSpec(fn.Sig, fn.Body, module); err != nil {
+				return Error{vm.pc(), i, err}
+			}
 		}
 		logger.Printf("No errors in function %d", i)
 	}

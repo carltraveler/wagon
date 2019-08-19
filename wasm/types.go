@@ -30,6 +30,7 @@ const (
 	ValueTypeI64 ValueType = 0x7e
 	ValueTypeF32 ValueType = 0x7d
 	ValueTypeF64 ValueType = 0x7c
+	ValueTypeUnk ValueType = 0x7b
 )
 
 var valueTypeStrMap = map[ValueType]string{
