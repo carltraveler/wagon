@@ -927,7 +927,6 @@ func (f *FunctionBody) MarshalWASM(w io.Writer) error {
 	if _, err := body.Write(f.Code); err != nil {
 		return err
 	}
-	body.WriteByte(end)
 	return writeBytesUint(w, body.Bytes())
 }
 
