@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/go-interpreter/wagon/validate"
 	"github.com/go-interpreter/wagon/wasm"
 )
 
@@ -178,6 +179,12 @@ func TestHostSymbolCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not read module: %v", err)
 	}
+
+	err = validate.VerifyModule(m)
+	if err != nil {
+		t.Fatalf("Could not verify module: %v", err)
+	}
+
 	vm, err := NewVM(m)
 	if err != nil {
 		t.Fatalf("Could not instantiate vm: %v", err)
@@ -205,6 +212,12 @@ func TestGoFunctionCallChecksForFirstArgument(t *testing.T) {
 			}
 		}
 	}()
+
+	err = validate.VerifyModule(m)
+	if err != nil {
+		t.Fatalf("Could not verify module: %v", err)
+	}
+
 	vm, err := NewVM(m)
 	if err != nil {
 		t.Fatalf("Could not instantiate vm: %v", err)
@@ -225,6 +238,12 @@ func TestHostTerminate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not read module: %v", err)
 	}
+
+	err = validate.VerifyModule(m)
+	if err != nil {
+		t.Fatalf("Could not verify module: %v", err)
+	}
+
 	vm, err := NewVM(m)
 	if err != nil {
 		t.Fatalf("Could not instantiate vm: %v", err)

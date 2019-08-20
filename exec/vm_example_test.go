@@ -12,6 +12,7 @@ import (
 	"reflect"
 
 	"github.com/go-interpreter/wagon/exec"
+	"github.com/go-interpreter/wagon/validate"
 	"github.com/go-interpreter/wagon/wasm"
 )
 
@@ -80,6 +81,11 @@ func ExampleVM_add() {
 	})
 	if err != nil {
 		log.Fatalf("could not read module: %v", err)
+	}
+
+	err = validate.VerifyModule(m)
+	if err != nil {
+		log.Fatalf("Could not verify module: %v", err)
 	}
 
 	vm, err := exec.NewVM(m)

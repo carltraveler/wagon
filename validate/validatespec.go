@@ -8,12 +8,12 @@ package validate
 import (
 	"bytes"
 	"errors"
+	"io"
+
 	"github.com/go-interpreter/wagon/wasm"
 	ops "github.com/go-interpreter/wagon/wasm/operators"
-	"io"
 )
 
-//according the function code decode. the last opcode end is not in code stream.
 func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *wasm.Module) (*mockSpecVM, error) {
 	vm := &mockSpecVM{
 		opdStack:   []wasm.ValueType{},
@@ -45,10 +45,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 		return vm, errors.New("MVP only support single return value")
 	}
 
-	err := vm.pushCtrl(wasm.ValueType(fnsig), wasm.ValueType(fnsig), frameTypeFunction)
-	if err != nil {
-		return vm, err
-	}
+	vm.pushCtrl(wasm.ValueType(fnsig), wasm.ValueType(fnsig), frameTypeOther)
 
 	for {
 		op, err := vm.code.ReadByte()
@@ -84,59 +81,32 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			err = vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), frameTypeBlock)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), frameTypeOther)
 		case ops.If:
 			sig, err := vm.fetchByte()
 			if err != nil {
 				return vm, err
 			}
 			/*If is not PolymorphicOp. handle operand stack already.*/
-			err = vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), frameTypeIf)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), frameTypeIf)
 		case ops.Loop:
 			sig, err := vm.fetchByte()
 			if err != nil {
 				return vm, err
 			}
-			err = vm.pushCtrl(wasm.ValueType(wasm.BlockTypeEmpty), wasm.ValueType(sig), frameTypeLoop)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushCtrl(wasm.ValueType(wasm.BlockTypeEmpty), wasm.ValueType(sig), frameTypeOther)
 		case ops.Else:
-			/*here seems different with spec. about the function block frame.*/
-			if vm.ctrlSize() == 1 {
-				return vm, errors.New("End can not match function block frame")
-			}
-
 			_, err = vm.matchElse()
 			if err != nil {
 				return vm, err
 			}
 
-			Type, err := vm.popCtrl()
+			typ, err := vm.popCtrl()
 			if err != nil {
 				return vm, err
 			}
-			err = vm.pushCtrl(Type, Type, frameTypeElse)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushCtrl(typ, typ, frameTypeOther)
 		case ops.End:
-			/*here seems different with spec. about the function block frame.*/
-			if vm.ctrlSize() == 1 {
-				return vm, errors.New("End can not match function block frame")
-			}
-
-			_, err = vm.matchEnd()
-			if err != nil {
-				return vm, err
-			}
-
 			cFrame, err := vm.topCtrl()
 			if err != nil {
 				return vm, err
@@ -146,14 +116,11 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, errors.New("type mismatch in if false branch")
 			}
 
-			Type, err := vm.popCtrl()
+			typ, err := vm.popCtrl()
 			if err != nil {
 				return vm, err
 			}
-			err = vm.pushOpd(Type)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushOpd(typ)
 		case ops.Br:
 			depth, err := vm.fetchVarUint()
 			if err != nil {
@@ -186,10 +153,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			err = vm.pushOpd(frame.labelTypes)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushOpd(frame.labelTypes)
 		case ops.BrTable:
 			targetCount, err := vm.fetchVarUint()
 			if err != nil {
@@ -279,26 +243,20 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if i >= uint32(len(localVariables)) {
 				return vm, InvalidLocalIndexError(i)
 			}
-			Type := localVariables[i]
+			typ := localVariables[i]
 			if op == ops.GetLocal {
-				err = vm.pushOpd(Type)
-				if err != nil {
-					return vm, err
-				}
+				vm.pushOpd(typ)
 			} else if op == ops.SetLocal {
-				_, err := vm.popOpdExpect(Type)
+				_, err := vm.popOpdExpect(typ)
 				if err != nil {
 					return vm, err
 				}
 			} else {
-				_, err := vm.popOpdExpect(Type)
+				_, err := vm.popOpdExpect(typ)
 				if err != nil {
 					return vm, err
 				}
-				err = vm.pushOpd(Type)
-				if err != nil {
-					return vm, err
-				}
+				vm.pushOpd(typ)
 			}
 		case ops.GetGlobal, ops.SetGlobal:
 			index, err := vm.fetchVarUint()
@@ -310,10 +268,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, wasm.InvalidGlobalIndexError(index)
 			}
 			if op == ops.GetGlobal {
-				err := vm.pushOpd(gv.Type.Type)
-				if err != nil {
-					return vm, err
-				}
+				vm.pushOpd(gv.Type.Type)
 			} else {
 				expectType := gv.Type.Type
 				if gv.Type.Mutable != true {
@@ -362,7 +317,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			}
 
 			if len(fn.Sig.ReturnTypes) > 0 {
-				err = vm.pushOpd(fn.Sig.ReturnTypes[0])
+				vm.pushOpd(fn.Sig.ReturnTypes[0])
 			}
 		case ops.CallIndirect:
 			if module.Table == nil || len(module.Table.Entries) == 0 {
@@ -397,41 +352,31 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			}
 
 			if len(fnExpectSig.ReturnTypes) > 0 {
-				err = vm.pushOpd(fnExpectSig.ReturnTypes[0])
+				vm.pushOpd(fnExpectSig.ReturnTypes[0])
 			}
 		case ops.Select:
 			_, err := vm.popOpdExpect(wasm.ValueTypeI32)
 			if err != nil {
 				return vm, err
 			}
-			Type1, err := vm.popOpd()
+			typ1, err := vm.popOpd()
 			if err != nil {
 				return vm, err
 			}
-			Type2, err := vm.popOpdExpect(Type1)
+			typ2, err := vm.popOpdExpect(typ1)
 			if err != nil {
 				return vm, err
 			}
-			err = vm.pushOpd(Type2)
-			if err != nil {
-				return vm, err
-			}
+			vm.pushOpd(typ2)
 		}
 	}
 
-	if vm.ctrlSize() != 1 {
-		return vm, errors.New("do not match function entry block")
+	if body.Code[len(body.Code)-1] != ops.End {
+		return vm, wasm.ErrFunctionNoEnd
 	}
 
-	_, err = vm.matchFunction()
-	if err != nil {
-		return vm, err
-	}
-
-	_, err = vm.popCtrl()
-	if err != nil {
-		return vm, err
-	}
+	// remove end opcode to exec.
+	body.Code = body.Code[:len(body.Code)-1]
 
 	return vm, nil
 }

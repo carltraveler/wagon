@@ -909,7 +909,7 @@ func (f *FunctionBody) UnmarshalWASM(r io.Reader) error {
 		return ErrFunctionNoEnd
 	}
 
-	f.Code = code[:len(code)-1]
+	f.Code = code[:]
 
 	return nil
 }
