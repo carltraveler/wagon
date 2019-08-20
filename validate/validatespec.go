@@ -371,12 +371,13 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 		}
 	}
 
+	if vm.ctrlSize() != 0 {
+		return vm, errors.New("function frame mismatched")
+	}
+
 	if body.Code[len(body.Code)-1] != ops.End {
 		return vm, wasm.ErrFunctionNoEnd
 	}
-
-	// remove end opcode to exec.
-	body.Code = body.Code[:len(body.Code)-1]
 
 	return vm, nil
 }

@@ -180,7 +180,7 @@ func (w *writer) writeFunctions() {
 				}
 				w.WriteString(")")
 			}
-			w.writeCode(b.Code, false)
+			w.writeCode(b.Code[:len(b.Code)-1], false)
 		}
 		w.WriteString(")")
 	}

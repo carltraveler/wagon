@@ -52,7 +52,7 @@ func TestHostCall(t *testing.T) {
 		// code should disassemble to:
 		// call 1 (which is host)
 		// end
-		Code: []byte{0x02, 0x00, 0x10, 0x01, 0x0b},
+		Code: []byte{0x02, 0x00, 0x10, 0x01, 0x0b, 0x0b},
 	}
 
 	// There was no call to `ReadModule` so this part emulates

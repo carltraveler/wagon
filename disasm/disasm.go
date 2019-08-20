@@ -90,6 +90,11 @@ var ErrStackUnderflow = errors.New("disasm: stack underflow")
 // parent module as an argument for locating any other functions referenced by
 // fn.
 func NewDisassembly(fn wasm.Function, module *wasm.Module) (*Disassembly, error) {
+	// remove end opcode first.
+	if len(fn.Body.Code) != 0 {
+		fn.Body.Code = fn.Body.Code[:len(fn.Body.Code)-1]
+	}
+
 	code := fn.Body.Code
 	instrs, err := Disassemble(code)
 	if err != nil {
