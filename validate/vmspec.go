@@ -59,6 +59,21 @@ func (vm *mockSpecVM) fetchByte() (byte, error) {
 	return vm.code.ReadByte()
 }
 
+func (vm *mockSpecVM) fetchBlockType() (wasm.ValueType, error) {
+	typ, err := vm.code.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+
+	switch wasm.ValueType(typ) {
+	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty):
+	default:
+		return 0, errors.New("unknow value type")
+	}
+
+	return wasm.ValueType(typ), nil
+}
+
 func (vm *mockSpecVM) fetchVarInt64() (int64, error) {
 	return leb128.ReadVarint64(vm.code)
 }
@@ -89,18 +104,10 @@ func (vm *mockSpecVM) ctrlSize() uint32 {
 	return uint32(len(vm.ctrlStack))
 }
 
-func (vm *mockSpecVM) pushOpd(typ wasm.ValueType) error {
-	switch typ {
-	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty), ValueTypeUnk:
-	default:
-		return errors.New("error value type")
-	}
-
+func (vm *mockSpecVM) pushOpd(typ wasm.ValueType) {
 	if typ != wasm.ValueType(wasm.BlockTypeEmpty) {
 		vm.opdStack = append(vm.opdStack, typ)
 	}
-
-	return nil
 }
 
 func (vm *mockSpecVM) popOpd() (wasm.ValueType, error) {
@@ -171,19 +178,7 @@ func (vm *mockSpecVM) popOpdExpect(expect wasm.ValueType) (wasm.ValueType, error
 	return actual, nil
 }
 
-func (vm *mockSpecVM) pushCtrl(labelTypes wasm.ValueType, endType wasm.ValueType, ifType bool) error {
-	switch labelTypes {
-	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty):
-	default:
-		return errors.New("error value type")
-	}
-
-	switch endType {
-	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty):
-	default:
-		return errors.New("error value type")
-	}
-
+func (vm *mockSpecVM) pushCtrl(labelTypes wasm.ValueType, endType wasm.ValueType, ifType bool) {
 	frame := ctrlFrame{
 		labelTypes:  labelTypes,
 		endType:     endType,
@@ -193,7 +188,6 @@ func (vm *mockSpecVM) pushCtrl(labelTypes wasm.ValueType, endType wasm.ValueType
 	}
 
 	vm.ctrlStack = append(vm.ctrlStack, frame)
-	return nil
 }
 
 func (vm *mockSpecVM) popCtrl() (wasm.ValueType, error) {
@@ -241,10 +235,7 @@ func (vm *mockSpecVM) adjustStack(op ops.Op) error {
 	}
 
 	if op.Returns != wasm.ValueType(wasm.BlockTypeEmpty) {
-		err := vm.pushOpd(op.Returns)
-		if err != nil {
-			return err
-		}
+		vm.pushOpd(op.Returns)
 	}
 	return nil
 }
