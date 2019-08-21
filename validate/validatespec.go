@@ -45,7 +45,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 		return vm, errors.New("MVP only support single return value")
 	}
 
-	vm.pushCtrl(wasm.ValueType(fnsig), wasm.ValueType(fnsig), frameTypeOther)
+	err := vm.pushCtrl(wasm.ValueType(fnsig), wasm.ValueType(fnsig), false)
+	if err != nil {
+		return vm, err
+	}
 
 	for {
 		op, err := vm.code.ReadByte()
@@ -81,20 +84,29 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), frameTypeOther)
+			err = vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), false)
+			if err != nil {
+				return vm, err
+			}
 		case ops.If:
 			sig, err := vm.fetchByte()
 			if err != nil {
 				return vm, err
 			}
 			/*If is not PolymorphicOp. handle operand stack already.*/
-			vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), frameTypeIf)
+			err = vm.pushCtrl(wasm.ValueType(sig), wasm.ValueType(sig), true)
+			if err != nil {
+				return vm, err
+			}
 		case ops.Loop:
 			sig, err := vm.fetchByte()
 			if err != nil {
 				return vm, err
 			}
-			vm.pushCtrl(wasm.ValueType(wasm.BlockTypeEmpty), wasm.ValueType(sig), frameTypeOther)
+			err = vm.pushCtrl(wasm.ValueType(wasm.BlockTypeEmpty), wasm.ValueType(sig), false)
+			if err != nil {
+				return vm, err
+			}
 		case ops.Else:
 			_, err = vm.matchElse()
 			if err != nil {
@@ -105,14 +117,17 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			vm.pushCtrl(typ, typ, frameTypeOther)
+			err = vm.pushCtrl(typ, typ, false)
+			if err != nil {
+				return vm, err
+			}
 		case ops.End:
 			cFrame, err := vm.topCtrl()
 			if err != nil {
 				return vm, err
 			}
 
-			if cFrame.fType == frameTypeIf && cFrame.endType != wasm.ValueType(wasm.BlockTypeEmpty) {
+			if cFrame.ifType && cFrame.endType != wasm.ValueType(wasm.BlockTypeEmpty) {
 				return vm, errors.New("type mismatch in if false branch")
 			}
 
@@ -120,7 +135,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			vm.pushOpd(typ)
+			err = vm.pushOpd(typ)
+			if err != nil {
+				return vm, err
+			}
 		case ops.Br:
 			depth, err := vm.fetchVarUint()
 			if err != nil {
@@ -153,7 +171,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			vm.pushOpd(frame.labelTypes)
+			err = vm.pushOpd(frame.labelTypes)
+			if err != nil {
+				return vm, err
+			}
 		case ops.BrTable:
 			targetCount, err := vm.fetchVarUint()
 			if err != nil {
@@ -245,7 +266,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			}
 			typ := localVariables[i]
 			if op == ops.GetLocal {
-				vm.pushOpd(typ)
+				err = vm.pushOpd(typ)
+				if err != nil {
+					return vm, err
+				}
 			} else if op == ops.SetLocal {
 				_, err := vm.popOpdExpect(typ)
 				if err != nil {
@@ -256,7 +280,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				if err != nil {
 					return vm, err
 				}
-				vm.pushOpd(typ)
+				err = vm.pushOpd(typ)
+				if err != nil {
+					return vm, err
+				}
 			}
 		case ops.GetGlobal, ops.SetGlobal:
 			index, err := vm.fetchVarUint()
@@ -268,11 +295,14 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, wasm.InvalidGlobalIndexError(index)
 			}
 			if op == ops.GetGlobal {
-				vm.pushOpd(gv.Type.Type)
+				err = vm.pushOpd(gv.Type.Type)
+				if err != nil {
+					return vm, err
+				}
 			} else {
 				expectType := gv.Type.Type
 				if gv.Type.Mutable != true {
-					return vm, errors.New("try to set unmutable global var.")
+					return vm, errors.New("try to set immutable global var.")
 				}
 				_, err := vm.popOpdExpect(expectType)
 				if err != nil {
@@ -316,8 +346,15 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				}
 			}
 
+			if len(fn.Sig.ReturnTypes) > 1 {
+				return vm, errors.New("validate: MVP not support multiple return types")
+			}
+
 			if len(fn.Sig.ReturnTypes) > 0 {
-				vm.pushOpd(fn.Sig.ReturnTypes[0])
+				err = vm.pushOpd(fn.Sig.ReturnTypes[0])
+				if err != nil {
+					return vm, err
+				}
 			}
 		case ops.CallIndirect:
 			if module.Table == nil || len(module.Table.Entries) == 0 {
@@ -337,6 +374,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, errors.New("validate: table index in call_indirect must be 0")
 			}
 
+			if index > uint32(len(module.Types.Entries)) {
+				return vm, errors.New("validate: type index out of bound")
+			}
+
 			fnExpectSig := module.Types.Entries[index]
 
 			_, err = vm.popOpdExpect(wasm.ValueTypeI32)
@@ -351,8 +392,15 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				}
 			}
 
+			if len(fnExpectSig.ReturnTypes) > 1 {
+				return vm, errors.New("validate: MVP not support multiple return types")
+			}
+
 			if len(fnExpectSig.ReturnTypes) > 0 {
-				vm.pushOpd(fnExpectSig.ReturnTypes[0])
+				err = vm.pushOpd(fnExpectSig.ReturnTypes[0])
+				if err != nil {
+					return vm, err
+				}
 			}
 		case ops.Select:
 			_, err := vm.popOpdExpect(wasm.ValueTypeI32)
@@ -367,7 +415,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			vm.pushOpd(typ2)
+			err = vm.pushOpd(typ2)
+			if err != nil {
+				return vm, err
+			}
 		}
 	}
 

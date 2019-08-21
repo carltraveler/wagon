@@ -14,13 +14,6 @@ import (
 	ops "github.com/go-interpreter/wagon/wasm/operators"
 )
 
-type frameType uint8
-
-const (
-	frameTypeIf    frameType = 0x5d
-	frameTypeOther frameType = 0x5c
-)
-
 const (
 	ValueTypeUnk wasm.ValueType = 0x7b
 )
@@ -38,7 +31,7 @@ type ctrlFrame struct {
 	endType     wasm.ValueType
 	height      uint32
 	unreachable bool
-	fType       frameType
+	ifType      bool
 }
 
 func (vm *mockSpecVM) matchElse() (bool, error) {
@@ -46,14 +39,12 @@ func (vm *mockSpecVM) matchElse() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	switch cFrame.fType {
-	case frameTypeIf:
+
+	if cFrame.ifType {
 		return true, nil
-	case frameTypeOther:
-		return false, errors.New("frame do not match else.")
 	}
 
-	return false, errors.New("frame type error")
+	return false, errors.New("frame do not match else.")
 }
 
 func (vm *mockSpecVM) fetchVarUint() (uint32, error) {
@@ -98,10 +89,18 @@ func (vm *mockSpecVM) ctrlSize() uint32 {
 	return uint32(len(vm.ctrlStack))
 }
 
-func (vm *mockSpecVM) pushOpd(typ wasm.ValueType) {
+func (vm *mockSpecVM) pushOpd(typ wasm.ValueType) error {
+	switch typ {
+	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty), ValueTypeUnk:
+	default:
+		return errors.New("error value type")
+	}
+
 	if typ != wasm.ValueType(wasm.BlockTypeEmpty) {
 		vm.opdStack = append(vm.opdStack, typ)
 	}
+
+	return nil
 }
 
 func (vm *mockSpecVM) popOpd() (wasm.ValueType, error) {
@@ -117,7 +116,7 @@ func (vm *mockSpecVM) popOpd() (wasm.ValueType, error) {
 	}
 
 	if len(vm.opdStack) == 0 {
-		return ValueTypeUnk, errors.New("code0 logic error")
+		panic("code logic error")
 	}
 
 	typ := vm.opdStack[len(vm.opdStack)-1]
@@ -172,16 +171,29 @@ func (vm *mockSpecVM) popOpdExpect(expect wasm.ValueType) (wasm.ValueType, error
 	return actual, nil
 }
 
-func (vm *mockSpecVM) pushCtrl(labelTypes wasm.ValueType, endType wasm.ValueType, fType frameType) {
+func (vm *mockSpecVM) pushCtrl(labelTypes wasm.ValueType, endType wasm.ValueType, ifType bool) error {
+	switch labelTypes {
+	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty):
+	default:
+		return errors.New("error value type")
+	}
+
+	switch endType {
+	case wasm.ValueTypeI32, wasm.ValueTypeI64, wasm.ValueTypeF32, wasm.ValueTypeF64, wasm.ValueType(wasm.BlockTypeEmpty):
+	default:
+		return errors.New("error value type")
+	}
+
 	frame := ctrlFrame{
 		labelTypes:  labelTypes,
 		endType:     endType,
 		height:      vm.opdSize(),
 		unreachable: false,
-		fType:       fType,
+		ifType:      ifType,
 	}
 
 	vm.ctrlStack = append(vm.ctrlStack, frame)
+	return nil
 }
 
 func (vm *mockSpecVM) popCtrl() (wasm.ValueType, error) {
@@ -229,7 +241,10 @@ func (vm *mockSpecVM) adjustStack(op ops.Op) error {
 	}
 
 	if op.Returns != wasm.ValueType(wasm.BlockTypeEmpty) {
-		vm.pushOpd(op.Returns)
+		err := vm.pushOpd(op.Returns)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
