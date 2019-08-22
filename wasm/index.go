@@ -82,6 +82,7 @@ func (m *Module) populateFunctions() error {
 	}
 
 	funcs := make([]uint32, 0, len(m.Function.Types)+len(m.imports.Funcs))
+
 	funcs = append(funcs, m.imports.Funcs...)
 	funcs = append(funcs, m.Function.Types...)
 	m.Function.Types = funcs
@@ -96,6 +97,26 @@ func (m *Module) GetFunction(i int) *Function {
 	}
 
 	return &m.FunctionIndexSpace[i]
+}
+
+func (m *Module) GetFunctionSig(i uint32) *FunctionSig {
+	var funcindex uint32
+	if m.Import != nil {
+		for _, importEntry := range m.Import.Entries {
+			if importEntry.Type.Kind() == ExternalFunction {
+				if funcindex == i {
+					typeindex := importEntry.Type.(FuncImport).Type
+					return &m.Types.Entries[typeindex]
+				}
+
+				funcindex++
+			}
+		}
+	}
+
+	i = i - (funcindex - uint32(len(m.imports.Funcs)))
+	typeindex := m.Function.Types[i]
+	return &m.Types.Entries[typeindex]
 }
 
 func (m *Module) populateGlobals() error {
@@ -116,6 +137,24 @@ func (m *Module) GetGlobal(i int) *GlobalEntry {
 	}
 
 	return &m.GlobalIndexSpace[i]
+}
+
+func (m *Module) GetGlobalType(i uint32) *GlobalVar {
+	var globalindex uint32
+	if m.Import != nil {
+		for _, importEntry := range m.Import.Entries {
+			if importEntry.Type.Kind() == ExternalGlobal {
+				if globalindex == i {
+					v := importEntry.Type.(GlobalVarImport).Type
+					return &v
+				}
+				globalindex++
+			}
+		}
+	}
+
+	i = i - (globalindex - uint32(m.imports.Globals))
+	return &m.Global.Globals[i].Type
 }
 
 func (m *Module) populateTables() error {
