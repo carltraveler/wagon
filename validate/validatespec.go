@@ -1,4 +1,4 @@
-// Copyright 2017 The go-interpreter Authors.  All rights reserved.
+// Copyright 2019 The go-interpreter Authors.  All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -37,11 +37,12 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 	}
 
 	var fnsig wasm.ValueType
-	if len(fn.ReturnTypes) == 0 {
+	switch len(fn.ReturnTypes) {
+	case 0:
 		fnsig = wasm.ValueType(wasm.BlockTypeEmpty)
-	} else if len(fn.ReturnTypes) == 1 {
+	case 1:
 		fnsig = fn.ReturnTypes[0]
-	} else {
+	default:
 		return vm, errors.New("MVP only support single return value")
 	}
 
@@ -87,7 +88,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			/*If is not PolymorphicOp. handle operand stack already.*/
+			// If is not PolymorphicOp. handle operand stack already.
 			vm.pushCtrl(sig, sig, true)
 		case ops.Loop:
 			sig, err := vm.fetchBlockType()
@@ -126,7 +127,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			/*due to the function block frame.*/
+			// due to the function block frame.
 			frame, err := vm.pickCtrl(depth)
 			if err != nil {
 				return vm, err
@@ -144,7 +145,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			/*sames like if. is not PolymorphicOp. handle operand stack before.*/
+			// sames like if. is not PolymorphicOp. handle operand stack before.
 			frame, err := vm.pickCtrl(depth)
 			if err != nil {
 				return vm, err
@@ -173,7 +174,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, err
 			}
 
-			/*pickCtrl will check the max depth*/
+			// pickCtrl will check the max depth
 			defaultFrame, err := vm.pickCtrl(defaultTarget)
 			if err != nil {
 				return vm, err
@@ -196,7 +197,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 			if err != nil {
 				return vm, err
 			}
-			vm.unreachable()
+			err = vm.unreachable()
 			if err != nil {
 				return vm, err
 			}
@@ -211,7 +212,7 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, err
 			}
 
-			vm.unreachable()
+			err = vm.unreachable()
 			if err != nil {
 				return vm, err
 			}
@@ -244,14 +245,15 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 				return vm, InvalidLocalIndexError(i)
 			}
 			typ := localVariables[i]
-			if op == ops.GetLocal {
+			switch op {
+			case ops.GetLocal:
 				vm.pushOpd(typ)
-			} else if op == ops.SetLocal {
+			case ops.SetLocal:
 				_, err := vm.popOpdExpect(typ)
 				if err != nil {
 					return vm, err
 				}
-			} else {
+			default:
 				_, err := vm.popOpdExpect(typ)
 				if err != nil {
 					return vm, err
@@ -279,7 +281,10 @@ func verifyBodyWithSpec(fn *wasm.FunctionSig, body *wasm.FunctionBody, module *w
 					return vm, err
 				}
 			}
-		case ops.I32Load, ops.I64Load, ops.F32Load, ops.F64Load, ops.I32Load8s, ops.I32Load8u, ops.I32Load16s, ops.I32Load16u, ops.I64Load8s, ops.I64Load8u, ops.I64Load16s, ops.I64Load16u, ops.I64Load32s, ops.I64Load32u, ops.I32Store, ops.I64Store, ops.F32Store, ops.F64Store, ops.I32Store8, ops.I32Store16, ops.I64Store8, ops.I64Store16, ops.I64Store32:
+		case ops.I32Load, ops.I64Load, ops.F32Load, ops.F64Load, ops.I32Load8s, ops.I32Load8u,
+			ops.I32Load16s, ops.I32Load16u, ops.I64Load8s, ops.I64Load8u, ops.I64Load16s, ops.I64Load16u,
+			ops.I64Load32s, ops.I64Load32u, ops.I32Store, ops.I64Store, ops.F32Store, ops.F64Store,
+			ops.I32Store8, ops.I32Store16, ops.I64Store8, ops.I64Store16, ops.I64Store32:
 			_, err := vm.fetchVarUint()
 			if err != nil {
 				return vm, err
