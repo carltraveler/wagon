@@ -149,7 +149,7 @@ func NewDisassembly(fn wasm.Function, module *wasm.Module) (*Disassembly, error)
 			top -= len(opStr.Args)
 			stackDepths.SetTop(uint64(top))
 			if top < 0 {
-				panic("should not happend underflow due to validation")
+				panic("underflow during validation")
 			}
 			if opStr.Returns != wasm.ValueType(wasm.BlockTypeEmpty) {
 				top++
@@ -208,14 +208,6 @@ func NewDisassembly(fn wasm.Function, module *wasm.Module) (*Disassembly, error)
 			sig := instr.Immediates[0].(wasm.BlockType)
 			logger.Printf("if, depth is %d", stackDepths.Top())
 			stackDepths.Push(stackDepths.Top())
-			// If this new block is unreachable, its
-			// entire instruction sequence is unreachable
-			// as well. To make sure that isInstrReachable
-			// returns the correct value, we don't push a new
-			// array to blockPolymorphicOps.
-
-			// Therefore, only push a new array if this instruction
-			// is reachable.
 			blockPolymorphicOps = append(blockPolymorphicOps, []int{})
 			instr.Block = &BlockInfo{
 				Start:     true,
@@ -301,15 +293,21 @@ func NewDisassembly(fn wasm.Function, module *wasm.Module) (*Disassembly, error)
 			index := instr.Immediates[0].(uint32)
 			var sig *wasm.FunctionSig
 			top := int(stackDepths.Top())
-			if op == ops.CallIndirect {
+
+			switch op {
+			case ops.CallIndirect:
 				if module.Types == nil {
 					return nil, errors.New("missing types section")
 				}
 				sig = &module.Types.Entries[index]
 				top--
-			} else {
-				sig = module.GetFunctionSig(index)
+			default:
+				sig, err = module.GetFunctionSig(index)
+				if err != nil {
+					return nil, err
+				}
 			}
+
 			top -= len(sig.ParamTypes)
 			top += len(sig.ReturnTypes)
 			stackDepths.SetTop(uint64(top))
