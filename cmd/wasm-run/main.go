@@ -14,6 +14,7 @@ import (
 	"github.com/go-interpreter/wagon/exec"
 	"github.com/go-interpreter/wagon/validate"
 	"github.com/go-interpreter/wagon/wasm"
+	//"io/ioutil"
 )
 
 func main() {
@@ -36,6 +37,19 @@ func main() {
 }
 
 func run(w io.Writer, fname string, verify bool) {
+	/*
+		codeStr, err := ioutil.ReadFile(fname)
+		if err != nil {
+			fmt.Printf("Read %s Error.\n", fname)
+			return
+		}
+			err = validate.VerifyWasmCodeFromRust(codeStr)
+			if err != nil {
+				panic(err)
+				return
+			}
+	*/
+
 	f, err := os.Open(fname)
 	if err != nil {
 		log.Fatal(err)
@@ -47,7 +61,7 @@ func run(w io.Writer, fname string, verify bool) {
 		log.Fatalf("could not read module: %v", err)
 	}
 
-	if verify {
+	if true {
 		err = validate.VerifyModule(m)
 		if err != nil {
 			log.Fatalf("could not verify module: %v", err)
@@ -62,8 +76,10 @@ func run(w io.Writer, fname string, verify bool) {
 	if err != nil {
 		log.Fatalf("could not create VM: %v", err)
 	}
-
 	for name, e := range m.Export.Entries {
+		if e.Kind != wasm.ExternalFunction {
+			continue
+		}
 		i := int64(e.Index)
 		fidx := m.Function.Types[int(i)]
 		ftype := m.Types.Entries[int(fidx)]
